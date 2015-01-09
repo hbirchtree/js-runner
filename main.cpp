@@ -1,6 +1,7 @@
 
 #include <QCoreApplication>
 #include <map>
+#include <vector>
 #include <iostream>
 #include <QPoint>
 #include <QString>
@@ -27,13 +28,22 @@ struct ActionStruct {
     qint8 in_type;
     qint8 in_signal;
     qint8 out_type;
+    qint16 axis_threshold;
     QString exec_string;
     QStringList keys;
     float mouseMoveFactor;
     QPoint mouseMoveVector;
 };
 
-typedef map<qint8,ActionStruct> actionmap;
+typedef multimap<qint8,ActionStruct> actionmap;
+typedef vector<ActionStruct> actionlist;
+typedef vector<SDL_Joystick*> joysticklist;
+typedef vector<SDL_GameController*> controllerlist;
+typedef pair<qint8,ActionStruct> actionpair;
+
+actionmap rootmap;
+actionlist findActions(qint8 key);
+void insertElement(actionmap *thismap, qint8 key,ActionStruct value);
 
 int main(int argc, char *argv[])
 {
@@ -48,23 +58,72 @@ int main(int argc, char *argv[])
     cParse.addPositionalArgument("joystick","Joystick identifier","<joystick name>");
     cParse.process(a.arguments());
 
-    qDebug() << cParse.positionalArguments();
-    qDebug() << cParse.values("button");
-    qDebug() << cParse.values("axis");
+    QString joystick;
+    foreach(QString btn,cParse.values("button")){
+        QStringList btnArgs = btn.split(":");
+        ActionStruct btnStruct;
+        btnStruct.in_type = Q_SDL_BUTTON;
+        btnStruct.in_signal = btnArgs.at(0).toInt();
+        insertElement(&rootmap,Q_SDL_BUTTON,btnStruct);
+    }
+
+    foreach(QString axe,cParse.values("axis")){
+        qDebug() << axe;
+    }
+
     actionmap test;
     ActionStruct testAction;
-    testAction.in_type = Q_SDL_BUTTON;
-    test[1] = testAction;
-    test[1] = testAction;
-    test[1] = testAction;
-    test.find(1);
-    for(actionmap::iterator finder=test.begin();finder!=test.end();finder++)
-        cout << finder.in_type;
+    testAction.in_type = 65;
+    insertElement(&rootmap,1,testAction);
+    insertElement(&rootmap,1,testAction);
+    insertElement(&rootmap,1,testAction);
+
+    foreach(ActionStruct act, findActions(1)){
+        cout << act.in_type;
+    }
+
 
     if(SDL_Init(SDL_INIT_GAMECONTROLLER)<0){
         qFatal("Failed to init GAMECONTROLLER");
         return 10;
     }
+    SDL_Event sdlEvent;
+    joysticklist jsdevs;
+    controllerlist ctllist;
+    while(true){
+        while(SDL_PollEvent(&sdlEvent)){
+            switch(sdlEvent.type){
+            case SDL_CONTROLLERDEVICEADDED:{
+                SDL_GameController* gc = SDL_GameControllerOpen(sdlEvent.cdevice.which);
+                cout << sdlEvent.cdevice.which;
+                if(gc){
+                    SDL_Joystick* jsdev = SDL_GameControllerGetJoystick(gc);
+                    ctllist.push_back(gc);
+                }
+                break;
+            }
+            case SDL_KEYDOWN:{
+                if(sdlEvent.key == SDLK_q)
+                    break;
+            }
+            }
+        }
+    }
 
     return 0;
+}
+
+void insertElement(actionmap *thismap, qint8 key,ActionStruct value){
+    actionpair insertPair;
+    insertPair.first = key;
+    insertPair.second = value;
+    thismap->insert(insertPair);
+}
+
+actionlist findActions(qint8 key){
+    actionlist returnlist;
+    rootmap.find(key);
+    for(auto const it : rootmap)
+        returnlist.push_back(it.second);
+    return returnlist;
 }
