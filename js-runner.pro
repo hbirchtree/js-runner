@@ -9,7 +9,7 @@ QT       += core
 QT       -= gui
 
 TARGET = js-runner
-CONFIG   += console c++11
+CONFIG   += console c++11 pthread
 CONFIG   -= app_bundle
 
 LIBS += -lSDL2

@@ -1,6 +1,8 @@
 
 #include <QCoreApplication>
 #include <map>
+#include <signal.h>
+#include <thread>
 #include <vector>
 #include <iostream>
 #include <QPoint>
@@ -52,14 +54,21 @@ actionmap rootmap;
 joystickmap jsdevs;
 controllermap ctllist;
 
+bool sdl_do_loop = true;
+std::thread* sdl_thread;
+
 //Functions
 actionlist findActions(qint8 key);
 void insertElement(actionmap *thismap, qint8 key,ActionStruct value);
 void addController(Sint32 which);
 void removeController(Sint32 which);
+void sdl_eventloop();
+void destructor(int s);
 
 int main(int argc, char *argv[])
 {
+    signal(SIGINT,destructor);
+
     QCoreApplication a(argc, argv);
     a.setApplicationName("JS Runner");
     a.setApplicationVersion("0.1");
@@ -96,40 +105,66 @@ int main(int argc, char *argv[])
         cout << act.in_type;
     }
 
+    sdl_thread = new std::thread(sdl_eventloop);
 
+    sdl_thread->join();
+    return 0;
+}
+
+void sdl_eventloop(){
     if(SDL_Init(SDL_INIT_GAMECONTROLLER)<0){
         qFatal("Failed to init GAMECONTROLLER");
-        return 10;
+        return;
     }
     SDL_Event sdlEvent;
     qDebug() << "Starting main loop";
-    while(true){
+    while(sdl_do_loop){
         while(SDL_PollEvent(&sdlEvent)){
             switch(sdlEvent.type){
             case SDL_CONTROLLERDEVICEADDED:{
+                qDebug() << "Controller added";
                 addController(sdlEvent.cdevice.which);
                 break;
             }
             case SDL_CONTROLLERDEVICEREMOVED:{
-
+                qDebug() << "Controller removed";
+                removeController(sdlEvent.cdevice.which);
+                break;
             }
             case SDL_KEYDOWN:{
-                if(sdlEvent.key.keysym.sym == SDLK_q)
-                    break;
+                qDebug() << "Key pressed";
+                switch(sdlEvent.key.keysym.sym){
+                case SDLK_q:{
+                    qDebug() << "Calling eventloop end";
+                    sdl_do_loop = false;
+                }
+                }
             }
             }
         }
     }
+}
 
-    return 0;
+void destructor(int s){
+    qDebug() << "dest";
+    sdl_do_loop = false;
+    sdl_thread->join();
+    for(auto const it : jsdevs){
+        SDL_JoystickClose(it.second);
+        jsdevs.erase(it.first);
+    }
+    for(auto const it : ctllist){
+        SDL_GameControllerClose(it.second);
+        ctllist.erase(it.first);
+    }
 }
 
 void addController(Sint32 which){
     SDL_GameController* gc = SDL_GameControllerOpen(which);
-    cout << which;
+    qDebug() << which;
     if(gc){
         SDL_Joystick* jsdev = SDL_GameControllerGetJoystick(gc);
-        cout << SDL_GameControllerName(gc);
+        qDebug() << SDL_GameControllerName(gc);
 
         //We add it to our maps so that we may close them later
         gcpair newGc;
@@ -149,11 +184,13 @@ void removeController(Sint32 which){
         if(it.first==which){
             SDL_Joystick* jsdev = it.second;
             SDL_JoystickClose(jsdev);
+            jsdevs.erase(which);
         }
     for(auto const it : ctllist)
         if(it.first==which){
             SDL_GameController* gc = it.second;
             SDL_GameControllerClose(gc);
+            ctllist.erase(which);
         }
 }
 
