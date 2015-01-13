@@ -37,13 +37,18 @@ struct ActionStruct {
 
 typedef multimap<qint8,ActionStruct> actionmap;
 typedef vector<ActionStruct> actionlist;
-typedef vector<SDL_Joystick*> joysticklist;
-typedef vector<SDL_GameController*> controllerlist;
+typedef map<SDL_JoystickGUID,SDL_Joystick*> joystickmap;
+typedef map<Sint32,SDL_GameController*> controllermap;
 typedef pair<qint8,ActionStruct> actionpair;
 
 actionmap rootmap;
+joystickmap jsdevs;
+controllermap ctllist;
+
 actionlist findActions(qint8 key);
 void insertElement(actionmap *thismap, qint8 key,ActionStruct value);
+void addController(Sint32 which);
+void removeController(Sint32 which);
 
 int main(int argc, char *argv[])
 {
@@ -88,22 +93,18 @@ int main(int argc, char *argv[])
         return 10;
     }
     SDL_Event sdlEvent;
-    joysticklist jsdevs;
-    controllerlist ctllist;
     while(true){
         while(SDL_PollEvent(&sdlEvent)){
             switch(sdlEvent.type){
             case SDL_CONTROLLERDEVICEADDED:{
-                SDL_GameController* gc = SDL_GameControllerOpen(sdlEvent.cdevice.which);
-                cout << sdlEvent.cdevice.which;
-                if(gc){
-                    SDL_Joystick* jsdev = SDL_GameControllerGetJoystick(gc);
-                    ctllist.push_back(gc);
-                }
+
                 break;
             }
+            case SDL_CONTROLLERDEVICEREMOVED:{
+
+            }
             case SDL_KEYDOWN:{
-                if(sdlEvent.key == SDLK_q)
+                if(sdlEvent.key.keysym.sym == SDLK_q)
                     break;
             }
             }
@@ -111,6 +112,20 @@ int main(int argc, char *argv[])
     }
 
     return 0;
+}
+
+void addController(Sint32 which){
+    SDL_GameController* gc = SDL_GameControllerOpen(sdlEvent.cdevice.which);
+    cout << sdlEvent.cdevice.which;
+    if(gc){
+        SDL_Joystick* jsdev = SDL_GameControllerGetJoystick(gc);
+        cout << SDL_GameControllerName(gc);
+        ctllist.push_back(gc);
+    }
+}
+
+void removeController(Sint32 which){
+
 }
 
 void insertElement(actionmap *thismap, qint8 key,ActionStruct value){
