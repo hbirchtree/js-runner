@@ -35,16 +35,24 @@ struct ActionStruct {
     QPoint mouseMoveVector;
 };
 
-typedef multimap<qint8,ActionStruct> actionmap;
+//Typedefs
 typedef vector<ActionStruct> actionlist;
-typedef map<SDL_JoystickGUID,SDL_Joystick*> joystickmap;
-typedef map<Sint32,SDL_GameController*> controllermap;
+
+typedef multimap<qint8,ActionStruct> actionmap;
 typedef pair<qint8,ActionStruct> actionpair;
 
+typedef map<Sint32,SDL_Joystick*> joystickmap;
+typedef pair<Sint32,SDL_Joystick*> jspair;
+
+typedef map<Sint32,SDL_GameController*> controllermap;
+typedef pair<Sint32,SDL_GameController*> gcpair;
+
+//Maps
 actionmap rootmap;
 joystickmap jsdevs;
 controllermap ctllist;
 
+//Functions
 actionlist findActions(qint8 key);
 void insertElement(actionmap *thismap, qint8 key,ActionStruct value);
 void addController(Sint32 which);
@@ -63,7 +71,10 @@ int main(int argc, char *argv[])
     cParse.addPositionalArgument("joystick","Joystick identifier","<joystick name>");
     cParse.process(a.arguments());
 
-    QString joystick;
+    string joystick;
+    for(auto const it : cParse.positionalArguments()){
+        qDebug() << it;
+    }
     foreach(QString btn,cParse.values("button")){
         QStringList btnArgs = btn.split(":");
         ActionStruct btnStruct;
@@ -75,8 +86,6 @@ int main(int argc, char *argv[])
     foreach(QString axe,cParse.values("axis")){
         qDebug() << axe;
     }
-
-    actionmap test;
     ActionStruct testAction;
     testAction.in_type = 65;
     insertElement(&rootmap,1,testAction);
@@ -93,11 +102,12 @@ int main(int argc, char *argv[])
         return 10;
     }
     SDL_Event sdlEvent;
+    qDebug() << "Starting main loop";
     while(true){
         while(SDL_PollEvent(&sdlEvent)){
             switch(sdlEvent.type){
             case SDL_CONTROLLERDEVICEADDED:{
-
+                addController(sdlEvent.cdevice.which);
                 break;
             }
             case SDL_CONTROLLERDEVICEREMOVED:{
@@ -115,17 +125,36 @@ int main(int argc, char *argv[])
 }
 
 void addController(Sint32 which){
-    SDL_GameController* gc = SDL_GameControllerOpen(sdlEvent.cdevice.which);
-    cout << sdlEvent.cdevice.which;
+    SDL_GameController* gc = SDL_GameControllerOpen(which);
+    cout << which;
     if(gc){
         SDL_Joystick* jsdev = SDL_GameControllerGetJoystick(gc);
         cout << SDL_GameControllerName(gc);
-        ctllist.push_back(gc);
+
+        //We add it to our maps so that we may close them later
+        gcpair newGc;
+        newGc.first = which;
+        newGc.second = gc;
+        ctllist.insert(newGc);
+        jspair newJs;
+        newJs.first = which;
+        newJs.second = jsdev;
+        jsdevs.insert(newJs);
     }
 }
 
 void removeController(Sint32 which){
-
+    //We look up the "which" int, close the js and controller
+    for(auto const it : jsdevs)
+        if(it.first==which){
+            SDL_Joystick* jsdev = it.second;
+            SDL_JoystickClose(jsdev);
+        }
+    for(auto const it : ctllist)
+        if(it.first==which){
+            SDL_GameController* gc = it.second;
+            SDL_GameControllerClose(gc);
+        }
 }
 
 void insertElement(actionmap *thismap, qint8 key,ActionStruct value){
