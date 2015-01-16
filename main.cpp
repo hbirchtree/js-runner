@@ -4,10 +4,12 @@
 #include <thread>
 #include <vector>
 #include <iostream>
+#include "keyaliases.h"
 #include <QPoint>
 #include <QString>
 #include <QDebug>
 #include <QStringList>
+#include <QKeySequence>
 #include <QProcess>
 #include <QCommandLineParser>
 #include <SDL2/SDL.h>
@@ -24,6 +26,7 @@ enum OutputElements {
     Q_JS_EXEC_FILE, //Will only spawn a process and detach from it.
     Q_JS_SIM_KEYS,
     Q_JS_SIM_MOUSE,
+    Q_JS_SIM_CLICK,
     Q_JS_SIM_SCROLL
 };
 
@@ -42,8 +45,10 @@ struct ActionStruct {
     quint8 in_signal;
     quint8 out_type;
     quint16 axis_threshold;
+    quint8 mouse_btn;
     QString exec_string;
     QStringList keys;
+    list<qint32> keys_int;
     QPoint mouseMoveVector;
 };
 
@@ -87,6 +92,7 @@ void sdl_eventloop();
 void destructor(int s);
 void handleJsEvent(qint8 eventType, quint8 eventMetaData, qint16 eventData);
 ActionStruct outEventInterpret(QStringList eventArgs, qint8 eventType);
+list<qint32> cheekyKeyConvert(QStringList keys);
 
 int main(int argc, char *argv[])
 {
@@ -145,7 +151,7 @@ int main(int argc, char *argv[])
 
     for(auto const it : rootmap){
         ActionStruct act = it.second;
-        qDebug() << act.in_type << act.in_signal << act.axis_threshold << act.out_type << act.keys << act.mouseMoveVector << act.exec_string;
+        qDebug() << act.in_type << act.in_signal << act.axis_threshold << act.out_type << act.keys << QList<qint32>::fromStdList(act.keys_int) << act.mouseMoveVector << act.exec_string;
     }
 
     sdl_thread = new std::thread(sdl_eventloop);
@@ -177,6 +183,7 @@ ActionStruct outEventInterpret(QStringList eventArgs,qint8 eventType){
         actStruct.exec_string = outData;
     }else if(outType=="key"){
         actStruct.out_type = Q_JS_SIM_KEYS;
+        actStruct.keys_int = cheekyKeyConvert(outData.split("+"));
         actStruct.keys = outData.split("+");
     }else if(outType=="mousemove"&&eventType!=Q_SDL_AXIS){
         actStruct.out_type = Q_JS_SIM_MOUSE;
@@ -201,6 +208,13 @@ ActionStruct outEventInterpret(QStringList eventArgs,qint8 eventType){
             mouseVec.setY(_strs.at(1).toInt());
         }
         actStruct.mouseMoveVector = mouseVec;
+    }else if(outType=="click"){
+        actStruct.out_type = Q_JS_SIM_CLICK;
+        for(auto const it : qstringBtnTranslation){
+            if(outData==it.first){
+                actStruct.mouse_btn = it.second;break;
+            }
+        }
     }else if(outType=="scroll"){
         actStruct.out_type = Q_JS_SIM_SCROLL;
         QPoint mouseVec;
@@ -218,6 +232,24 @@ ActionStruct outEventInterpret(QStringList eventArgs,qint8 eventType){
     }
     actStruct.in_type = 0;
     return actStruct;
+}
+
+list<qint32> cheekyKeyConvert(QStringList keys){
+    list<qint32> outList;
+    for(auto const keke : keys){
+        for(auto const kaka : qstringKeyTranslation)
+            if(kaka.first==keke){
+                outList.insert(outList.end(),kaka.second);
+                goto keyconvert_step_out;
+            }
+        if(keke!=""){
+            QKeySequence converter = QKeySequence::fromString(keke);
+            outList.insert(outList.end(),converter[0]);
+        }
+        keyconvert_step_out:
+        continue;
+    }
+    return outList;
 }
 
 void sdl_eventloop(){
