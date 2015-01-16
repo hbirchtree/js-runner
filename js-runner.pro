@@ -18,3 +18,6 @@ TEMPLATE = app
 
 
 SOURCES += main.cpp
+
+HEADERS += \
+    keyaliases.h
