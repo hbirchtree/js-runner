@@ -40,24 +40,8 @@ enum StringEnum {
     Q_DESC_JOYPOS
 };
 
-struct ActionStruct {
-    qint8 in_type;
-    quint8 in_signal;
-    quint8 out_type;
-    quint16 axis_threshold;
-    quint8 mouse_btn;
-    QString exec_string;
-    QStringList keys;
-    list<qint32> keys_int;
-    QPoint mouseMoveVector;
-};
-
 //Typedefs
-typedef vector<ActionStruct> actionlist;
 typedef list<qint16> keylist;
-
-typedef multimap<qint8,ActionStruct> actionmap;
-typedef pair<qint8,ActionStruct> actionpair;
 
 typedef map<Sint32,SDL_Joystick*> joystickmap;
 typedef pair<Sint32,SDL_Joystick*> jspair;
@@ -71,6 +55,27 @@ typedef pair<qint8,QString> strpr;
 typedef map<quint8,qint16> axismap; //Used for keeping track of active axes, as they may be held without changing their values. SDL is only invoked when the values change.
 typedef pair<quint8,qint16> axispair;
 
+typedef list<quint8> buttonmap;
+
+typedef list<quint32> qtkeylist;
+
+
+struct ActionStruct {
+    qint8 in_type;
+    buttonmap in_signal;
+    quint8 out_type;
+    quint16 axis_threshold;
+    quint8 mouse_btn;
+    QString exec_string;
+    QStringList keys;
+    qtkeylist keys_int;
+    QPoint mouseMoveVector;
+};
+
+typedef multimap<qint8,ActionStruct> actionmap;
+typedef pair<qint8,ActionStruct> actionpair;
+
+typedef vector<ActionStruct> actionlist;
 
 //Maps
 actionmap rootmap;
@@ -79,6 +84,8 @@ controllermap ctllist;
 string targetJs;
 stringmap optstrings;
 
+buttonmap pButtons;
+axismap pAxes;
 
 bool sdl_do_loop = true;
 std::thread* sdl_thread;
@@ -92,7 +99,7 @@ void sdl_eventloop();
 void destructor(int s);
 void handleJsEvent(qint8 eventType, quint8 eventMetaData, qint16 eventData);
 ActionStruct outEventInterpret(QStringList eventArgs, qint8 eventType);
-list<qint32> cheekyKeyConvert(QStringList keys);
+qtkeylist cheekyKeyConvert(QStringList keys);
 
 int main(int argc, char *argv[])
 {
@@ -151,7 +158,7 @@ int main(int argc, char *argv[])
 
     for(auto const it : rootmap){
         ActionStruct act = it.second;
-        qDebug() << act.in_type << act.in_signal << act.axis_threshold << act.out_type << act.keys << QList<qint32>::fromStdList(act.keys_int) << act.mouseMoveVector << act.exec_string;
+        qDebug() << act.in_type << QList<quint8>::fromStdList(act.in_signal) << act.axis_threshold << act.out_type << act.keys << QList<quint32>::fromStdList(act.keys_int) << act.mouseMoveVector << act.exec_string;
     }
 
     sdl_thread = new std::thread(sdl_eventloop);
@@ -170,7 +177,16 @@ ActionStruct outEventInterpret(QStringList eventArgs,qint8 eventType){
     }
     if(eventArgs.size()<2+_offs)
         return actStruct;
-    actStruct.in_signal = eventArgs.at(0).toInt();
+    if(eventType==Q_SDL_BUTTON){
+        buttonmap btns;
+        for(auto const it: eventArgs.at(0).split(","))
+            btns.insert(btns.end(),it.toInt());
+        actStruct.in_signal = btns;
+    }else{
+        buttonmap axes;//It's a lie! It's a map of axes!
+        axes.insert(axes.end(),eventArgs.at(0).toInt());
+        actStruct.in_signal = axes;
+    }
     QString outType = eventArgs.at(1+_offs);
     QString outData;
     for(auto const it : eventArgs.mid(2+_offs,-1)) //In case we chopped up something we shouldn't have
@@ -234,8 +250,8 @@ ActionStruct outEventInterpret(QStringList eventArgs,qint8 eventType){
     return actStruct;
 }
 
-list<qint32> cheekyKeyConvert(QStringList keys){
-    list<qint32> outList;
+qtkeylist cheekyKeyConvert(QStringList keys){
+    qtkeylist outList;
     for(auto const keke : keys){
         for(auto const kaka : qstringKeyTranslation)
             if(kaka.first==keke){
@@ -302,6 +318,25 @@ void sdl_eventloop(){
 void handleJsEvent(qint8 eventType,quint8 eventMetaData,qint16 eventData){
     switch(eventType){
     case Q_SDL_BUTTON:{
+        if(eventMetaData==0){
+            //Register press
+            pButtons.insert(pButtons.begin(),eventData);
+
+            //Check if this corresponds to an action
+            for(auto const action : findActions(Q_SDL_BUTTON)){
+                quint8 matches = 0;
+                for(auto const btn : action.in_signal)
+                    for(auto const press : pButtons)
+                        if(btn==press)
+                            matches++;
+                if(matches==action.in_signal.size()){
+                    qDebug() << "MATCH:" << QList<quint8>::fromStdList(action.in_signal);
+//                    performAction(action.second);
+                }
+            }
+        }else{
+
+        }
         qDebug() << "js_btn:" << eventMetaData << eventData;
         break;
     }
